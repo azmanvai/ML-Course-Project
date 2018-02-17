@@ -1,0 +1,93 @@
+---
+title: "Prediction Assignment Writeup for Machine Learning Course"
+author: "Nor Azman Zakaria"
+date: "February 15, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(ggplot2)
+library(ipred)
+library(plyr)
+library(e1071)
+```
+
+### Executive Summary
+
+The goal of this project is to predict the manner (classe variable) in which subjects perform various exercises based on data recorded from wearables. Data is courtesy of Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements.
+
+### Data Preparation and Pre-processing
+
+Two datasets, pml-training and pml-testing, are saved as dat and validation dat has 17000 observations of 160 variables. 100 variables were found with 98% missing values. Due to significant proportions of missing values, these variables were excluded and remaining data saved as dat2. 70% of dat2 is set as training and the remaining as testing. The same variables were excluded from validation set. Training will be used for model building while testing is used for out of sample accuracy. Validation is reserved for submission of predictions only   
+
+```{r data, echo = FALSE}
+dat <- read.csv("pml-training.csv", stringsAsFactors = FALSE, na.string = c("","NA"))
+validation <- read.csv("pml-testing.csv", stringsAsFactors = FALSE, na.string = c("","NA"))
+na <- sum(is.na(dat))
+nas <- apply(dat,2, function(x) {sum(is.na(x))})
+percent.nas <- nas/nrow(dat)
+index <- which(nas > 19000)
+dat2 <- dat[,-index]
+intrain <- createDataPartition(dat2$classe, p = 0.7, list = FALSE) 
+training <- dat2[intrain,]
+testing <- dat2[-intrain,]
+validation2 <- validation[,-index]
+```
+
+### Exploratory Analysis
+
+Training data has 60 variables with 13737 observations. Data is a mixture of characters, integers and numbers. Date is shown as character. There are no missing values. A plot of classe vs cvtd_timestamp shows all test subjects performed different levels of activities in a sequential manner.  
+```{r explore, echo=FALSE}
+dim(training)
+names(training)
+str(training)
+g <- ggplot(training, aes(x=cvtd_timestamp, y = classe)) + geom_point(aes(col = training$user_name))
+g
+```
+
+### Model Selection
+
+Models that will be considered shall be able to perform classification with feature selection. The strategy would be to run 2 to 3 classification models on training set, evaluate their accuracies on tests set and stack them together. The best of individual or stacked models will be chosen as final model for the validation set. Cross validation method is k-folds with 10 folds and 3 repeats.  
+
+Models:
+1. rpart
+2. treebag
+
+### Result on Testing Dataset
+The rpart model is only about 66% accurate on the testing set. It was not able to predict class C & D at all althogh it did well on class A & B. The treebag model is almost perfect at 99.9% accuracy. It was able to predict all but 1 prediction on class A. The treebag model is chosen as the final model for the validation dataset
+
+### Rpart Model Result
+```{r rpart, echo=FALSE}
+set.seed(1311)
+control <- trainControl(method = "repeatedcv",
+                           number = 10,
+                           repeats = 3)
+fit.rpart <- train(classe~., data = training, method = "rpart", trControl = control)
+pred.rpart <- predict(fit.rpart, testing)
+acc.rpart <- confusionMatrix(testing$classe, pred.rpart)
+fit.rpart
+acc.rpart
+```
+
+### Treebag Model Result
+```{r treebag, echo=FALSE}
+set.seed(5465)
+control <- trainControl(method = "repeatedcv",
+                           number = 10,
+                           repeats = 3)
+fit.tb <- train(classe~., data = training, method = "treebag", trControl = control)
+pred.tb <- predict(fit.tb, testing)
+acc.tb <- confusionMatrix(testing$classe, pred.tb)
+fit.tb
+acc.tb
+```
+
+### Prediction on Validation Dataset
+Below is the prediction on Validation dataset using the treebag model
+
+```{r valid, echo=FALSE}
+pred <- predict(fit.tb, validation2)
+pred
+```
